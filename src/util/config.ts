@@ -115,6 +115,10 @@ export function generateContext(context?: BuildContext): BuildContext {
   setProcessEnvVar(Constants.ENV_VAR_IONIC_ANGULAR_DIR, context.ionicAngularDir);
   Logger.debug(`ionicAngularDir set to ${context.ionicAngularDir}`);
 
+  const angularDir = resolve(getConfigValue(context, '--angularDir', null, Constants.ENV_VAR_AT_ANGULAR_DIR, Constants.ENV_VAR_AT_ANGULAR_DIR.toLowerCase(), join(context.nodeModulesDir, Constants.AT_ANGULAR)));
+  setProcessEnvVar(Constants.ENV_VAR_AT_ANGULAR_DIR, angularDir);
+  Logger.debug(`angularDir set to ${angularDir}`);
+
   const ionicAngularTemplatesDir = join(context.ionicAngularDir, 'templates');
   setProcessEnvVar(Constants.ENV_VAR_IONIC_ANGULAR_TEMPLATE_DIR, ionicAngularTemplatesDir);
   Logger.debug(`ionicAngularTemplatesDir set to ${ionicAngularTemplatesDir}`);

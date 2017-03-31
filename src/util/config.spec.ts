@@ -81,6 +81,7 @@ describe('config', () => {
       expect(context.providersDir).toEqual(join(context.srcDir, 'providers'));
       expect(context.nodeModulesDir).toEqual(join(process.cwd(), Constants.NODE_MODULES));
       expect(context.ionicAngularDir).toEqual(join(process.cwd(), Constants.NODE_MODULES, Constants.IONIC_ANGULAR));
+      expect(fakeConfig[Constants.ENV_VAR_AT_ANGULAR_DIR]).toEqual(join(context.nodeModulesDir, Constants.AT_ANGULAR));
       expect(fakeConfig[Constants.ENV_VAR_IONIC_ANGULAR_TEMPLATE_DIR]).toEqual(join(context.ionicAngularDir, 'templates'));
       expect(context.platform).toEqual(null);
       expect(context.target).toEqual(null);

@@ -1,4 +1,7 @@
 import { extname, join } from 'path';
+
+import * as MagicString from 'magic-string';
+
 import { Logger } from './logger/logger';
 import { fillConfigDefaults, getUserConfigFile, replacePathVars } from './util/config';
 import * as Constants from './util/constants';
@@ -47,6 +50,7 @@ export function deleteOptimizationJsFile(fileToDelete: string) {
 
 export function doOptimizations(context: BuildContext, dependencyMap: Map<string, Set<string>>) {
   // remove decorators
+
   const modifiedMap = new Map(dependencyMap);
   if (getBooleanPropertyValue(Constants.ENV_EXPERIMENTAL_PURGE_DECORATORS)) {
     removeDecorators(context);
@@ -76,8 +80,9 @@ function optimizationEnabled() {
 function removeDecorators(context: BuildContext) {
   const jsFiles = context.fileCache.getAll().filter(file => extname(file.path) === '.js');
   jsFiles.forEach(jsFile => {
-    jsFile.content = purgeDecorators(jsFile.path, jsFile.content);
-    jsFile.content = removeTSickleClosureDeclarations(jsFile.path, jsFile.content, getStringPropertyValue(Constants.ENV_VAR_IONIC_ANGULAR_DIR), context.srcDir);
+    let magicString = new MagicString(jsFile.content);
+    magicString = purgeDecorators(jsFile.path, jsFile.content, getStringPropertyValue(Constants.ENV_VAR_IONIC_ANGULAR_DIR), getStringPropertyValue(Constants.ENV_VAR_AT_ANGULAR_DIR), context.srcDir, magicString);
+    // jsFile.content = removeTSickleClosureDeclarations(jsFile.path, jsFile.content, getStringPropertyValue(Constants.ENV_VAR_IONIC_ANGULAR_DIR), context.srcDir);
   });
 }
 

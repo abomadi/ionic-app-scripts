@@ -19,6 +19,7 @@ export const PAGE = 'page';
 export const PIPE = 'pipe';
 export const PROVIDER = 'provider';
 export const TABS = 'tabs';
+export const AT_ANGULAR = '@angular';
 
 
 export const ENV_VAR_PROD = 'prod';
@@ -37,6 +38,7 @@ export const ENV_VAR_WWW_DIR = 'IONIC_WWW_DIR';
 export const ENV_VAR_HTML_TO_SERVE = 'IONIC_HTML_TO_SERVE';
 export const ENV_VAR_BUILD_DIR = 'IONIC_BUILD_DIR';
 export const ENV_VAR_NODE_MODULES_DIR = 'IONIC_NODE_MODULES_DIR';
+export const ENV_VAR_AT_ANGULAR_DIR = 'IONIC_AT_ANGULAR_DIR';
 export const ENV_VAR_IONIC_ANGULAR_DIR = 'IONIC_ANGULAR_DIR';
 export const ENV_VAR_IONIC_ANGULAR_TEMPLATE_DIR = 'IONIC_ANGULAR_TEMPLATE_DIR';
 export const ENV_VAR_TARGET = 'IONIC_TARGET';

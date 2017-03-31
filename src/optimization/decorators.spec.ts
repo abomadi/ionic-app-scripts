@@ -1,10 +1,15 @@
+import { join } from 'path';
 import * as decorators from './decorators';
 import * as Constants from '../util/constants';
 import * as helpers from '../util/helpers';
 
 import * as MagicString from 'magic-string';
 
-const entryPoint = '/Users/noone/Dev/myApp3/node_modules/ionic-angular/index.js';
+const baseDir = join(process.cwd(), 'myApp');
+const ionicAngular = join(baseDir, 'node_modules', 'ionic-angular');
+const angularDir = join(baseDir, 'node_modules', '@angular');
+const srcDir = join(baseDir, 'src');
+
 
 describe('optimization', () => {
   describe('purgeDecoratorStatements', () => {
@@ -235,12 +240,12 @@ ${additionalGeneratedContent}
 
 some more content
       `;
-      spyOn(helpers, helpers.getStringPropertyValue.name).and.returnValue(entryPoint);
 
       // act
-      const instance = new MagicString(knownContent);
-      const returnedInstance = decorators.purgeDecorators(entryPoint, knownContent, instance);
-      const result = returnedInstance.toString();
+      let magicString = new MagicString(knownContent);
+      const entryPoint = join(ionicAngular, 'index.js');
+      magicString = decorators.purgeDecorators(entryPoint, knownContent, ionicAngular, angularDir, srcDir, magicString);
+      const result = magicString.toString();
 
       // assert
       expect(result).not.toEqual(knownContent);
@@ -248,7 +253,48 @@ some more content
       const matches = regex.exec(result);
       expect(matches).toBeFalsy();
       expect(result.indexOf(additionalGeneratedContent)).toBeGreaterThan(-1);
-      expect(helpers.getStringPropertyValue).toHaveBeenCalledWith(Constants.ENV_VAR_IONIC_ANGULAR_ENTRY_POINT);
+    });
+
+    it('should not remove decorators when it has an injectable statement in it', () => {
+        const knownContent = `
+var ActionSheetController = (function () {
+    /**
+     * @param {?} _app
+     * @param {?} config
+     */
+    function ActionSheetController(_app, config) {
+        this._app = _app;
+        this.config = config;
+    }
+    /**
+     * Open an action sheet with a title, subTitle, and an array of buttons
+     * @param {?=} opts
+     * @return {?}
+     */
+    ActionSheetController.prototype.create = function (opts) {
+        if (opts === void 0) { opts = {}; }
+        return new ActionSheet(this._app, opts, this.config);
+    };
+    return ActionSheetController;
+}());
+export { ActionSheetController };
+ActionSheetController.decorators = [
+    { type: Injectable },
+];
+/**
+ * @nocollapse
+ */
+ActionSheetController.ctorParameters = function () { return [
+    { type: App, },
+    { type: Config, },
+]; };
+        `;
+
+      let magicString = new MagicString(knownContent);
+      const entryPoint = join(ionicAngular, 'index.js');
+      magicString = decorators.purgeDecorators(entryPoint, knownContent, ionicAngular, angularDir, srcDir, magicString);
+      const result = magicString.toString();
+      expect(result).toEqual(knownContent);
     });
   });
 
@@ -831,9 +877,9 @@ function Scroll_tsickle_Closure_declarations() {
 //# sourceMappingURL=scroll.js.map
         `;
 
-        const knownPath = '/users/fakename/fakepath/dev/myApp/src/pages/scroll.js';
+        const srcDir = join(process.cwd(), 'some', 'fake', 'path');
+        const knownPath = join(srcDir, 'scroll.js');
         const ionicAngularDir = '';
-        const srcDir = '/users/fakename/fakepath/dev/myApp/src';
 
         const result = decorators.removeTSickleClosureDeclarations(knownPath, knownContent, ionicAngularDir, srcDir);
         expect(result).not.toEqual(knownContent);
