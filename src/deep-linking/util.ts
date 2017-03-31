@@ -200,9 +200,9 @@ export function hasExistingDeepLinkConfig(appNgModuleFilePath: string, appNgModu
 
 function getIonicModuleForRootCall(decorator: Decorator) {
   const argument = getNgModuleObjectLiteralArg(decorator);
-  const properties = argument.properties.filter((property: PropertyAssignment) => {
+  const properties = argument && argument.properties ? argument.properties.filter((property: PropertyAssignment) => {
     return (property.name as Identifier).text === NG_MODULE_IMPORT_DECLARATION;
-  });
+  }) : [];
 
   if (properties.length === 0) {
     throw new Error('Could not find "import" property in NgModule arguments');
@@ -214,9 +214,9 @@ function getIonicModuleForRootCall(decorator: Decorator) {
 
   const property = properties[0] as PropertyAssignment;
   const importArrayLiteral = property.initializer as ArrayLiteralExpression;
-  const functionsInImport = importArrayLiteral.elements.filter(element => {
+  const functionsInImport = importArrayLiteral && importArrayLiteral.elements ? importArrayLiteral.elements.filter(element => {
     return element.kind === SyntaxKind.CallExpression;
-  });
+  }) : [];
 
   const ionicModuleFunctionCalls = functionsInImport.filter((functionNode: CallExpression) => {
 
