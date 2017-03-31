@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { join } from 'path';
+import { dirname, extname, join } from 'path';
 
 import * as webpackApi from 'webpack';
 
@@ -8,7 +8,7 @@ import { fillConfigDefaults, getUserConfigFile, replacePathVars } from './util/c
 import * as Constants from './util/constants';
 import { BuildError, IgnorableError } from './util/errors';
 import { emit, EventType } from './util/events';
-import { getBooleanPropertyValue, printDependencyMap, webpackStatsToDependencyMap } from './util/helpers';
+import { getBooleanPropertyValue, printDependencyMap, webpackStatsToDependencyMap, writeFileAsync } from './util/helpers';
 import { BuildContext, BuildState, ChangedFile, TaskInfo } from './util/interfaces';
 
 
@@ -95,7 +95,7 @@ function webpackBuildComplete(stats: any, context: BuildContext, webpackConfig: 
 
   // set the module files used in this bundle
   // this reference can be used elsewhere in the build (sass)
-  const files = stats.compilation.modules.map((webpackObj: any) => {
+  const files: string[] = stats.compilation.modules.map((webpackObj: any) => {
     if (webpackObj.resource) {
       return webpackObj.resource;
     } else {
@@ -108,7 +108,15 @@ function webpackBuildComplete(stats: any, context: BuildContext, webpackConfig: 
 
   context.moduleFiles = files;
 
-  return Promise.resolve();
+  return writeBundleFilesToDisk(context);
+}
+
+export function writeBundleFilesToDisk(context: BuildContext) {
+  const bundledFilesToWrite = context.fileCache.getAll().filter(file => {
+    return dirname(file.path) === context.buildDir && (file.path.endsWith('.js') || file.path.endsWith('.js.map'));
+  });
+  const promises = bundledFilesToWrite.map(bundledFileToWrite => writeFileAsync(bundledFileToWrite.path, bundledFileToWrite.content));
+  return Promise.all(promises);
 }
 
 export function runWebpackFullBuild(config: WebpackConfig) {

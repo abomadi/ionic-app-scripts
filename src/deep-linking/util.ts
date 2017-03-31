@@ -17,7 +17,7 @@ import {
 import { Logger } from '../logger/logger';
 import * as Constants from '../util/constants';
 import { FileCache } from '../util/file-cache';
-import { changeExtension, getStringPropertyValue, replaceAll } from '../util/helpers';
+import { changeExtension, getStringPropertyValue, replaceAll, toUnixPath } from '../util/helpers';
 import { BuildContext, ChangedFile, DeepLinkConfigEntry, DeepLinkDecoratorAndClass, DeepLinkPathInfo, File } from '../util/interfaces';
 import {
   appendAfter,
@@ -69,7 +69,7 @@ export function getNgModuleDataFromPage(appNgModuleFilePath: string, filePath: s
   const ngModulePath = getNgModulePathFromCorrespondingPage(filePath);
   let ngModuleFile = fileCache.get(ngModulePath);
   if (!ngModuleFile) {
-    throw new Error(`${filePath} has a @DeepLink decorator, but it does not have a corresponding "NgModule" at ${ngModulePath}`);
+    throw new Error(`${filePath} has a @IonicPage decorator, but it does not have a corresponding "NgModule" at ${ngModulePath}`);
   }
   // get the class declaration out of NgModule class content
   const exportedClassName = getNgModuleClassName(ngModuleFile.path, ngModuleFile.content);
@@ -81,14 +81,14 @@ export function getNgModuleDataFromPage(appNgModuleFilePath: string, filePath: s
 
   return {
     absolutePath: absolutePath,
-    userlandModulePath: userlandModulePath,
+    userlandModulePath: toUnixPath(userlandModulePath),
     className: namedExport
   };
 }
 
 export function getDeepLinkDecoratorContentForSourceFile(sourceFile: SourceFile): DeepLinkDecoratorAndClass {
   const classDeclarations = getClassDeclarations(sourceFile);
-
+  const defaultSegment = basename(changeExtension(sourceFile.fileName, ''));
   const list: DeepLinkDecoratorAndClass[] = [];
 
   classDeclarations.forEach(classDeclaration => {
@@ -107,7 +107,7 @@ export function getDeepLinkDecoratorContentForSourceFile(sourceFile: SourceFile)
           }
 
           const deepLinkName = getStringValueFromDeepLinkDecorator(sourceFile, propertyList, className, DEEPLINK_DECORATOR_NAME_ATTRIBUTE);
-          const deepLinkSegment = getStringValueFromDeepLinkDecorator(sourceFile, propertyList, null, DEEPLINK_DECORATOR_SEGMENT_ATTRIBUTE);
+          const deepLinkSegment = getStringValueFromDeepLinkDecorator(sourceFile, propertyList, defaultSegment, DEEPLINK_DECORATOR_SEGMENT_ATTRIBUTE);
           const deepLinkPriority = getStringValueFromDeepLinkDecorator(sourceFile, propertyList, 'low', DEEPLINK_DECORATOR_PRIORITY_ATTRIBUTE);
           const deepLinkDefaultHistory = getArrayValueFromDeepLinkDecorator(sourceFile, propertyList, [], DEEPLINK_DECORATOR_DEFAULT_HISTORY_ATTRIBUTE);
           const rawStringContent = getNodeStringContent(sourceFile, decorator.expression);
@@ -125,7 +125,7 @@ export function getDeepLinkDecoratorContentForSourceFile(sourceFile: SourceFile)
   });
 
   if (list.length > 1) {
-    throw new Error('Only one @DeepLink decorator is allowed per file.');
+    throw new Error('Only one @IonicPage decorator is allowed per file.');
   }
 
   if (list.length === 1) {
@@ -152,7 +152,7 @@ function getStringValueFromDeepLinkDecorator(sourceFile: SourceFile, propertyNod
     Logger.debug(`[DeepLinking util] getNameValueFromDeepLinkDecorator: DeepLink ${identifierToLookFor} set to ${valueToReturn}`);
     return valueToReturn;
   } catch (ex) {
-    Logger.error(`Failed to parse the @DeepLink decorator. The ${identifierToLookFor} must be an array of strings`);
+    Logger.error(`Failed to parse the @IonicPage decorator. The ${identifierToLookFor} must be an array of strings`);
     throw ex;
   }
 }
@@ -180,7 +180,7 @@ function getArrayValueFromDeepLinkDecorator(sourceFile: SourceFile, propertyNode
     Logger.debug(`[DeepLinking util] getNameValueFromDeepLinkDecorator: DeepLink ${identifierToLookFor} set to ${valueToReturn}`);
     return valueToReturn;
   } catch (ex) {
-    Logger.error(`Failed to parse the @DeepLink decorator. The ${identifierToLookFor} must be an array of strings`);
+    Logger.error(`Failed to parse the @IonicPage decorator. The ${identifierToLookFor} must be an array of strings`);
     throw ex;
   }
 }
@@ -265,7 +265,6 @@ export function updateAppNgModuleAndFactoryWithDeepLinkConfig(context: BuildCont
   }
 
   const updatedAppNgModuleContent = getUpdatedAppNgModuleContentWithDeepLinkConfig(appNgModulePath, appNgModuleFile.content, deepLinkString);
-
   context.fileCache.set(appNgModulePath, { path: appNgModulePath, content: updatedAppNgModuleContent});
 
   const appNgModuleOutput = transpileTsString(context, appNgModulePath, updatedAppNgModuleContent);
@@ -298,12 +297,12 @@ export function updateAppNgModuleAndFactoryWithDeepLinkConfig(context: BuildCont
     context.fileCache.set(appNgModuleFactoryPathJsFile, { path: appNgModuleFactoryPathJsFile, content: appNgModuleFactoryOutput.outputText});
 
     if (changedFiles) {
-    changedFiles.push({
-      event: 'change',
-      filePath: appNgModuleFactoryPath,
-      ext: extname(appNgModuleFactoryPath).toLowerCase()
-    });
-  }
+      changedFiles.push({
+        event: 'change',
+        filePath: appNgModuleFactoryPath,
+        ext: extname(appNgModuleFactoryPath).toLowerCase()
+      });
+    }
   }
 }
 
@@ -331,7 +330,7 @@ export function getUpdatedAppNgModuleFactoryContentWithDeepLinksConfig(appNgModu
   // tried to do this with typescript API, wasn't clear on how to do it
   const regex = /this.*?DeepLinkConfigToken.*?=([\s\S]*?);/g;
   const results = regex.exec(appNgModuleFactoryFileContent);
-  if (results.length === 2) {
+  if (results && results.length === 2) {
     const actualString = results[0];
     const chunkToReplace = results[1];
     const fullStringToReplace = actualString.replace(chunkToReplace, deepLinkStringContent);
@@ -358,16 +357,15 @@ export function generateDefaultDeepLinkNgModuleContent(pageFilePath: string, cla
 
   return `
 import { NgModule } from '@angular/core';
-import { DeepLinkModule } from 'ionic-angular';
+import { IonicPageModule } from 'ionic-angular';
 import { ${className} } from './${importFrom}';
-
 
 @NgModule({
   declarations: [
     ${className},
   ],
   imports: [
-    DeepLinkModule.forChild(${className})
+    IonicPageModule.forChild(${className})
   ]
 })
 export class ${className}Module {}
@@ -377,7 +375,7 @@ export class ${className}Module {}
 
 
 
-const DEEPLINK_DECORATOR_TEXT = 'DeepLink';
+const DEEPLINK_DECORATOR_TEXT = 'IonicPage';
 const DEEPLINK_DECORATOR_NAME_ATTRIBUTE = 'name';
 const DEEPLINK_DECORATOR_SEGMENT_ATTRIBUTE = 'segment';
 const DEEPLINK_DECORATOR_PRIORITY_ATTRIBUTE = 'priority';

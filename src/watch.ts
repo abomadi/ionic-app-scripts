@@ -31,6 +31,7 @@ export function watch(context?: BuildContext, configFile?: string) {
   context.sassState = BuildState.RequiresBuild;
   context.transpileState = BuildState.RequiresBuild;
   context.bundleState = BuildState.RequiresBuild;
+  context.deepLinkState = BuildState.RequiresBuild;
 
   const logger = new Logger('watch');
 
@@ -82,6 +83,7 @@ function startWatcher(name: string, watcher: Watcher, context: BuildContext) {
       }
       reject(new BuildError(`A watch configured to watch the following paths failed to start. It likely that a file referenced does not exist: ${filesWatchedString}`));
     }, getIntPropertyValue(Constants.ENV_START_WATCH_TIMEOUT));
+
     prepareWatcher(context, watcher);
 
     if (!watcher.paths) {
@@ -157,53 +159,108 @@ export function prepareWatcher(context: BuildContext, watcher: Watcher) {
     watcher.options.ignoreInitial = true;
   }
 
-  if (typeof watcher.options.ignored === 'string') {
-    watcher.options.ignored = normalize(replacePathVars(context, watcher.options.ignored));
+  if (watcher.options.ignored) {
+    if (Array.isArray(watcher.options.ignored)) {
+      watcher.options.ignored = watcher.options.ignored.map(p => normalize(replacePathVars(context, p)));
+    } else if (typeof watcher.options.ignored === 'string') {
+      // it's a string, so just do it once and leave it
+      watcher.options.ignored = normalize(replacePathVars(context, watcher.options.ignored));
+    }
   }
 
-  if (typeof watcher.paths === 'string') {
-    watcher.paths = normalize(replacePathVars(context, watcher.paths));
-
-  } else if (Array.isArray(watcher.paths)) {
-    watcher.paths = watcher.paths.map(p => normalize(replacePathVars(context, p)));
+  if (watcher.paths) {
+    if (Array.isArray(watcher.paths)) {
+      watcher.paths = watcher.paths.map(p => normalize(replacePathVars(context, p)));
+    } else {
+      watcher.paths = normalize(replacePathVars(context, watcher.paths));
+    }
   }
 }
 
 
-let queuedChangedFiles: ChangedFile[] = [];
-let queuedChangeFileTimerId: any;
+let queuedWatchEventsMap = new Map<string, ChangedFile>();
+let queuedWatchEventsTimerId: any;
 
 export function buildUpdate(event: string, filePath: string, context: BuildContext) {
+  return queueWatchUpdatesForBuild(event, filePath, context);
+}
+
+export function queueWatchUpdatesForBuild(event: string, filePath: string, context: BuildContext) {
   const changedFile: ChangedFile = {
     event: event,
     filePath: filePath,
     ext: extname(filePath).toLowerCase()
   };
 
-  // do not allow duplicates
-  if (!queuedChangedFiles.some(f => f.filePath === filePath)) {
-    queuedChangedFiles.push(changedFile);
+  queuedWatchEventsMap.set(filePath, changedFile);
 
-    // debounce our build update incase there are multiple files
-    clearTimeout(queuedChangeFileTimerId);
+  // debounce our build update incase there are multiple files
+  clearTimeout(queuedWatchEventsTimerId);
 
-    // run this code in a few milliseconds if another hasn't come in behind it
-    queuedChangeFileTimerId = setTimeout(() => {
-      // figure out what actually needs to be rebuilt
-      const changedFiles = runBuildUpdate(context, queuedChangedFiles);
+  // run this code in a few milliseconds if another hasn't come in behind it
+  queuedWatchEventsTimerId = setTimeout(() => {
 
-      // clear out all the files that are queued up for the build update
-      queuedChangedFiles.length = 0;
+    // figure out what actually needs to be rebuilt
+    const queuedChangeFileList: ChangedFile[] = [];
+    queuedWatchEventsMap.forEach(changedFile => queuedChangeFileList.push(changedFile));
 
-      if (changedFiles && changedFiles.length) {
-        // cool, we've got some build updating to do ;)
-        buildTask.buildUpdate(changedFiles, context);
-      }
-    }, BUILD_UPDATE_DEBOUNCE_MS);
-  }
+    const changedFiles = runBuildUpdate(context, queuedChangeFileList);
+
+    // clear out all the files that are queued up for the build update
+    queuedWatchEventsMap.clear();
+
+    if (changedFiles && changedFiles.length) {
+      // cool, we've got some build updating to do ;)
+      queueOrRunBuildUpdate(changedFiles, context);
+    }
+  }, BUILD_UPDATE_DEBOUNCE_MS);
 
   return Promise.resolve();
 }
+
+// exported just for use in unit testing
+export let buildUpdatePromise: Promise<any> = null;
+export let queuedChangedFileMap = new Map<string, ChangedFile>();
+export function queueOrRunBuildUpdate(changedFiles: ChangedFile[], context: BuildContext) {
+  if (buildUpdatePromise) {
+    // there is an active build going on, so queue our changes and run
+    // another build when this one finishes
+
+    // in the event this is called multiple times while queued, we are following a "last event wins" pattern
+    // so if someone makes an edit, and then deletes a file, the last "ChangedFile" is the one we act upon
+    changedFiles.forEach(changedFile => {
+      queuedChangedFileMap.set(changedFile.filePath, changedFile);
+    });
+    return buildUpdatePromise;
+  } else {
+    // there is not an active build going going on
+    // clear out any queued file changes, and run the build
+    queuedChangedFileMap.clear();
+
+    const buildUpdateCompleteCallback: () => Promise<any> = () => {
+      // the update is complete, so check if there are pending updates that need to be run
+      buildUpdatePromise = null;
+      if (queuedChangedFileMap.size > 0) {
+        const queuedChangeFileList: ChangedFile[] = [];
+        queuedChangedFileMap.forEach(changedFile => {
+          queuedChangeFileList.push(changedFile);
+        });
+        return queueOrRunBuildUpdate(queuedChangeFileList, context);
+      }
+      return Promise.resolve();
+    };
+
+    buildUpdatePromise = buildTask.buildUpdate(changedFiles, context);
+    return buildUpdatePromise.then(buildUpdateCompleteCallback).catch((err: Error) => {
+      return buildUpdateCompleteCallback();
+    });
+  }
+}
+
+
+
+
+
 
 let queuedCopyChanges: ChangedFile[] = [];
 let queuedCopyTimerId: any;
@@ -265,9 +322,11 @@ export function runBuildUpdate(context: BuildContext, changedFiles: ChangedFile[
     if (requiresFullBuild) {
       // .ts file was added or deleted, we need a full rebuild
       context.transpileState = BuildState.RequiresBuild;
+      context.deepLinkState = BuildState.RequiresBuild;
     } else {
       // .ts files have changed, so we can get away with doing an update
       context.transpileState = BuildState.RequiresUpdate;
+      context.deepLinkState = BuildState.RequiresUpdate;
     }
   }
 
@@ -296,6 +355,7 @@ export function runBuildUpdate(context: BuildContext, changedFiles: ChangedFile[
       // .html file was added/deleted
       // we should do a full transpile build because of this
       context.transpileState = BuildState.RequiresBuild;
+      context.deepLinkState = BuildState.RequiresBuild;
     }
   }
 

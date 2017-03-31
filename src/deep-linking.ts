@@ -3,7 +3,7 @@ import { Logger } from './logger/logger';
 import * as Constants from './util/constants';
 import { BuildError } from './util/errors';
 import { getStringPropertyValue, setParsedDeepLinkConfig } from './util/helpers';
-import { BuildContext, ChangedFile, DeepLinkConfigEntry } from './util/interfaces';
+import { BuildContext, BuildState, ChangedFile, DeepLinkConfigEntry } from './util/interfaces';
 
 import { convertDeepLinkConfigEntriesToString, getDeepLinkData, hasExistingDeepLinkConfig, updateAppNgModuleAndFactoryWithDeepLinkConfig } from './deep-linking/util';
 
@@ -35,7 +35,7 @@ function deepLinkingWorker(context: BuildContext) {
   return deepLinkingWorkerImpl(context, null);
 }
 
-function deepLinkingWorkerImpl(context: BuildContext, changedFiles: ChangedFile[]) {
+export function deepLinkingWorkerImpl(context: BuildContext, changedFiles: ChangedFile[]) {
   return Promise.resolve().then(() => {
     const appNgModulePath = getStringPropertyValue(Constants.ENV_APP_NG_MODULE_PATH);
     const appNgModuleFile = context.fileCache.get(appNgModulePath);
@@ -44,7 +44,7 @@ function deepLinkingWorkerImpl(context: BuildContext, changedFiles: ChangedFile[
     }
     const deepLinkConfigEntries = getDeepLinkData(appNgModulePath, context.fileCache, context.runAot);
     const hasExisting = hasExistingDeepLinkConfig(appNgModulePath, cachedUnmodifiedAppNgModuleFileContent);
-    if (!hasExisting) {
+    if (!hasExisting && deepLinkConfigEntries && deepLinkConfigEntries.length) {
       // only update the app's main ngModule if there isn't an existing config
       const deepLinkString = convertDeepLinkConfigEntriesToString(deepLinkConfigEntries);
       updateAppNgModuleAndFactoryWithDeepLinkConfig(context, deepLinkString, changedFiles, context.runAot);
@@ -54,14 +54,38 @@ function deepLinkingWorkerImpl(context: BuildContext, changedFiles: ChangedFile[
 }
 
 export function deepLinkingUpdate(changedFiles: ChangedFile[], context: BuildContext) {
-  // TODO, consider optimizing later
+  if (context.deepLinkState === BuildState.RequiresBuild) {
+    return deepLinkingWorkerFullUpdate(context);
+  } else {
+    return deepLinkingUpdateImpl(changedFiles, context);
+  }
+}
+
+export function deepLinkingUpdateImpl(changedFiles: ChangedFile[], context: BuildContext) {
+  const tsFiles = changedFiles.filter(changedFile => changedFile.ext === '.ts');
+  if (tsFiles.length === 0) {
+    return Promise.resolve();
+  }
   const logger = new Logger('deeplinks update');
   return deepLinkingWorkerImpl(context, changedFiles).then((deepLinkConfigEntries: DeepLinkConfigEntry[]) => {
     setParsedDeepLinkConfig(deepLinkConfigEntries);
     logger.finish();
   }).catch((err: Error) => {
+    Logger.warn(err.message);
     const error = new BuildError(err.message);
     throw logger.fail(error);
   });
 }
 
+export function deepLinkingWorkerFullUpdate(context: BuildContext) {
+  const logger = new Logger(`deeplinks update`);
+  return deepLinkingWorker(context).then((deepLinkConfigEntries: DeepLinkConfigEntry[]) => {
+      setParsedDeepLinkConfig(deepLinkConfigEntries);
+      logger.finish();
+    })
+    .catch((err: Error) => {
+      Logger.warn(err.message);
+      const error = new BuildError(err.message);
+      throw logger.fail(error);
+    });
+}

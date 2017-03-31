@@ -1,6 +1,6 @@
 import * as CompilerCLI from '@angular/compiler-cli';
 import AngularCompilerOptions from '@angular/tsc-wrapped/src/options';
-import { CompilerHost, Program } from 'typescript';
+import { CompilerHost, CompilerOptions, Program } from 'typescript';
 
 import { FileCache } from './file-cache';
 import { VirtualDirStats, VirtualFileStats } from './virtual-file-utils';
@@ -36,6 +36,7 @@ export interface BuildContext {
   transpileState?: BuildState;
   templateState?: BuildState;
   bundleState?: BuildState;
+  deepLinkState?: BuildState;
 
   // target examples: cordova, browser, electron
   target?: string;
@@ -178,6 +179,7 @@ export interface CodegenOptions {
   cliOptions: CompilerCLI.NgcCliOptions;
   program: Program;
   compilerHost: CompilerHost;
+  compilerOptions: CompilerOptions;
 };
 
 export interface TreeShakeCalcResults {

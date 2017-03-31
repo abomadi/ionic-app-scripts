@@ -4,9 +4,12 @@ import { createReadStream, createWriteStream, ensureDir, readdir, readFile, read
 import * as osName from 'os-name';
 
 import * as Constants from './constants';
+import { BuildError } from './errors';
 import { BuildContext, DeepLinkConfigEntry, File, WebpackStats } from './interfaces';
 import { Logger } from '../logger/logger';
-
+import { CAMEL_CASE_REGEXP } from './helpers/camel-case-regexp';
+import { CAMEL_CASE_UPPER_REGEXP } from './helpers/camel-case-upper-regexp';
+import { NON_WORD_REGEXP } from './helpers/non-word-regexp';
 
 let _context: BuildContext;
 let _parsedDeepLinkConfig: DeepLinkConfigEntry[];
@@ -291,10 +294,6 @@ export function getBooleanPropertyValue(propertyName: string) {
   return result === 'true';
 }
 
-export function getPropertyValue(propertyName: string) {
-  return process.env[propertyName];
-}
-
 export function convertFilePathToNgFactoryPath(filePath: string) {
   const directory = dirname(filePath);
   const extension = extname(filePath);
@@ -347,6 +346,10 @@ export function purgeWebpackPrefixFromPath(filePath: string) {
 }
 
 export function replaceAll(input: string, toReplace: string, replacement: string) {
+  if (!replacement) {
+    replacement = '';
+  }
+
   return input.split(toReplace).join(replacement);
 }
 
@@ -364,4 +367,64 @@ export function removeSuffix(input: string, suffix: string) {
   }
 
   return input;
+}
+
+export function buildErrorToJson(buildError: BuildError) {
+  return {
+    message: buildError.message,
+    name: buildError.name,
+    stack: buildError.stack,
+    hasBeenLogged: buildError.hasBeenLogged,
+    isFatal: buildError.isFatal
+  };
+}
+
+export function upperCaseFirst(input: string) {
+  if (input.length > 1) {
+    return input.charAt(0).toUpperCase() + input.substr(1);
+  }
+  return input.toUpperCase();
+}
+
+export function sentenceCase(input: string) {
+  const noCase = removeCaseFromString(input);
+  return upperCaseFirst(noCase);
+}
+
+export function camelCase(input: string) {
+  input = removeCaseFromString(input);
+  input = input.replace(/ (?=\d)/g, '_');
+  return input.replace(/ (.)/g, (m: string, arg: string) => {
+    return arg.toUpperCase();
+  });
+}
+
+export function paramCase(input: string) {
+  return removeCaseFromString(input, '-');
+}
+
+export function pascalCase(input: string) {
+  return upperCaseFirst(camelCase(input));
+}
+
+export function removeCaseFromString(input: string, inReplacement?: string) {
+  const replacement = inReplacement && inReplacement.length > 0 ? inReplacement : ' ';
+
+  function replace (match: string, index: number, value: string) {
+    if (index === 0 || index === (value.length - match.length)) {
+      return '';
+    }
+
+    return replacement;
+  }
+
+  const modified = input
+    // Support camel case ("camelCase" -> "camel Case").
+    .replace(CAMEL_CASE_REGEXP, '$1 $2')
+    // Support odd camel case ("CAMELCase" -> "CAMEL Case").
+    .replace(CAMEL_CASE_UPPER_REGEXP, '$1 $2')
+    // Remove all non-word characters and replace with a single space.
+    .replace(NON_WORD_REGEXP, replace);
+
+  return modified.toLowerCase();
 }

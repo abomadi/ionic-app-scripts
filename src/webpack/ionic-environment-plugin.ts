@@ -1,9 +1,11 @@
+import { join } from 'path';
 import { getParsedDeepLinkConfig } from '../util/helpers';
 import { BuildContext , DeepLinkConfigEntry} from '../util/interfaces';
 import { Logger } from '../logger/logger';
 import { getInstance } from '../util/hybrid-file-system-factory';
-import { createResolveDependenciesFromContextMap } from './util';
 import { WatchMemorySystem } from './watch-memory-system';
+
+import * as ContextElementDependency from 'webpack/lib/dependencies/ContextElementDependency';
 
 export class IonicEnvironmentPlugin {
   constructor(private context: BuildContext) {
@@ -18,10 +20,26 @@ export class IonicEnvironmentPlugin {
         if (!result) {
           return callback();
         }
+
+        const ngModuleLoaderDirectory = join('ionic-angular', 'util');
+        if (!result.resource.endsWith(ngModuleLoaderDirectory)) {
+          return callback(null, result);
+        }
+
         result.resource = this.context.srcDir;
         result.recursive = true;
         result.dependencies.forEach((dependency: any) => dependency.critical = false);
-        result.resolveDependencies = createResolveDependenciesFromContextMap((_: any, cb: any) => cb(null, webpackDeepLinkModuleDictionary));
+        result.resolveDependencies = (p1: any, p2: any, p3: any, p4: RegExp, cb: any ) => {
+          const dependencies = Object.keys(webpackDeepLinkModuleDictionary)
+                                  .map((key) => {
+                                    const value = webpackDeepLinkModuleDictionary[key];
+                                    if (value) {
+                                      return new ContextElementDependency(value, key);
+                                    }
+                                    return null;
+                                  }).filter(dependency => !!dependency);
+          cb(null, dependencies);
+        };
         return callback(null, result);
       });
     });
@@ -31,6 +49,7 @@ export class IonicEnvironmentPlugin {
       const hybridFileSystem = getInstance();
       hybridFileSystem.setFileSystem(compiler.inputFileSystem);
       compiler.inputFileSystem = hybridFileSystem;
+      compiler.outputFileSystem = hybridFileSystem;
       compiler.watchFileSystem = new WatchMemorySystem(this.context.fileCache);
 
       // do a bunch of webpack specific stuff here, so cast to an any

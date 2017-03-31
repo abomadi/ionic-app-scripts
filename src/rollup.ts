@@ -1,10 +1,12 @@
-import { BuildContext, BuildState, ChangedFile, TaskInfo } from './util/interfaces';
-import { BuildError } from './util/errors';
-import { fillConfigDefaults, getUserConfigFile, replacePathVars } from './util/config';
-import { ionicRollupResolverPlugin, PLUGIN_NAME } from './rollup/ionic-rollup-resolver-plugin';
 import { join, isAbsolute, normalize, sep } from 'path';
-import { Logger } from './logger/logger';
 import * as rollupBundler from 'rollup';
+
+import { Logger } from './logger/logger';
+import { ionicRollupResolverPlugin, PLUGIN_NAME } from './rollup/ionic-rollup-resolver-plugin';
+import { fillConfigDefaults, getUserConfigFile, replacePathVars } from './util/config';
+import { BuildError } from './util/errors';
+import { writeFileAsync } from './util/helpers';
+import { BuildContext, BuildState, ChangedFile, TaskInfo } from './util/interfaces';
 
 
 export function rollup(context: BuildContext, configFile: string) {
@@ -67,6 +69,7 @@ export function rollupWorker(context: BuildContext, configFile: string): Promise
     rollupBundler.rollup(rollupConfig)
       .then((bundle: RollupBundle) => {
 
+
         Logger.debug(`bundle.modules: ${bundle.modules.length}`);
 
         // set the module files used in this bundle
@@ -85,8 +88,18 @@ export function rollupWorker(context: BuildContext, configFile: string): Promise
           cachedBundle = bundle;
         }
 
+        const bundleOutput = bundle.generate(rollupConfig);
+
         // write the bundle
-        return bundle.write(rollupConfig);
+        const promises: Promise<any>[] = [];
+        promises.push(writeFileAsync(rollupConfig.dest, bundleOutput.code));
+        context.fileCache.set(rollupConfig.dest, { path: rollupConfig.dest, content: bundleOutput.code});
+        if (bundleOutput.map) {
+          const sourceMapContent = bundleOutput.map.toString();
+          promises.push(writeFileAsync(rollupConfig.dest + '.map', sourceMapContent));
+          context.fileCache.set(rollupConfig.dest + '.map', { path: rollupConfig.dest + '.map', content: sourceMapContent});
+        }
+        return Promise.all(promises);
       })
       .then(() => {
         // clean up any references (overkill yes, but let's play it safe)
@@ -183,7 +196,13 @@ export interface RollupBundle {
   // https://github.com/rollup/rollup/wiki/JavaScript-API
   write?: Function;
   modules: RollupModule[];
+  generate: (config: RollupConfig) => RollupBundleOutput;
 };
+
+export interface RollupBundleOutput {
+  code: string;
+  map: string;
+}
 
 
 export interface RollupModule {
