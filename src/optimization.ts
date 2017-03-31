@@ -6,10 +6,10 @@ import { Logger } from './logger/logger';
 import { fillConfigDefaults, getUserConfigFile, replacePathVars } from './util/config';
 import * as Constants from './util/constants';
 import { BuildError } from './util/errors';
-import { getBooleanPropertyValue, getStringPropertyValue, webpackStatsToDependencyMap, printDependencyMap, unlinkAsync } from './util/helpers';
+import { getBooleanPropertyValue, getStringPropertyValue, webpackStatsToDependencyMap, printDependencyMap } from './util/helpers';
 import { BuildContext, TaskInfo } from './util/interfaces';
 import { runWebpackFullBuild, WebpackConfig } from './webpack';
-import { purgeDecorators, removeTSickleClosureDeclarations } from './optimization/decorators';
+import { purgeStaticFieldDecorators } from './optimization/decorators';
 import { getAppModuleNgFactoryPath, calculateUnusedComponents, purgeUnusedImportsAndExportsFromIndex, purgeComponentNgFactoryImportAndUsage, purgeProviderControllerImportAndUsage, purgeProviderClassNameFromIonicModuleForRoot } from './optimization/treeshake';
 
 export function optimization(context: BuildContext, configFile: string) {
@@ -35,17 +35,12 @@ function optimizationWorker(context: BuildContext, configFile: string): Promise<
         printDependencyMap(dependencyMap);
         Logger.debug('Original Dependency Map End');
       }
-      return deleteOptimizationJsFile(join(webpackConfig.output.path, webpackConfig.output.filename));
     }).then(() => {
       return doOptimizations(context, dependencyMap);
     });
   } else {
     return Promise.resolve();
   }
-}
-
-export function deleteOptimizationJsFile(fileToDelete: string) {
-  return unlinkAsync(fileToDelete);
 }
 
 export function doOptimizations(context: BuildContext, dependencyMap: Map<string, Set<string>>) {
@@ -81,7 +76,8 @@ function removeDecorators(context: BuildContext) {
   const jsFiles = context.fileCache.getAll().filter(file => extname(file.path) === '.js');
   jsFiles.forEach(jsFile => {
     let magicString = new MagicString(jsFile.content);
-    magicString = purgeDecorators(jsFile.path, jsFile.content, getStringPropertyValue(Constants.ENV_VAR_IONIC_ANGULAR_DIR), getStringPropertyValue(Constants.ENV_VAR_AT_ANGULAR_DIR), context.srcDir, magicString);
+    magicString = purgeStaticFieldDecorators(jsFile.path, jsFile.content, getStringPropertyValue(Constants.ENV_VAR_IONIC_ANGULAR_DIR), getStringPropertyValue(Constants.ENV_VAR_AT_ANGULAR_DIR), context.srcDir, magicString);
+    jsFile.content = magicString.toString();
     // jsFile.content = removeTSickleClosureDeclarations(jsFile.path, jsFile.content, getStringPropertyValue(Constants.ENV_VAR_IONIC_ANGULAR_DIR), context.srcDir);
   });
 }

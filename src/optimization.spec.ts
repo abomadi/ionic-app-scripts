@@ -18,7 +18,7 @@ describe('optimization task', () => {
       };
 
       spyOn(helpers, helpers.getBooleanPropertyValue.name).and.returnValue(false);
-      spyOn(decorators, decorators.purgeDecorators.name);
+      spyOn(decorators, decorators.purgeStaticFieldDecorators.name);
       spyOn(treeshake, treeshake.calculateUnusedComponents.name);
 
       // act
@@ -26,12 +26,12 @@ describe('optimization task', () => {
 
       // assert
       expect(result).toBeTruthy();
-      expect(decorators.purgeDecorators).not.toHaveBeenCalled();
+      expect(decorators.purgeStaticFieldDecorators).not.toHaveBeenCalled();
       expect(treeshake.calculateUnusedComponents).not.toHaveBeenCalled();
     });
   });
 
-  describe('purgeGeneratedFiles', () => {
+  /*describe('purgeGeneratedFiles', () => {
     it('should remove files in buildDir with suffix from the cache', () => {
       const buildDir = join(process.cwd(), 'some', 'fake', 'dir', 'myApp', 'www', 'build');
       const context = {
@@ -61,4 +61,5 @@ describe('optimization task', () => {
       expect(context.fileCache.get(filePathTwo)).toBeFalsy();
     });
   });
+  */
 });

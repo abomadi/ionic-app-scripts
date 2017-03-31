@@ -12,9 +12,9 @@ const srcDir = join(baseDir, 'src');
 
 
 describe('optimization', () => {
-  describe('purgeDecoratorStatements', () => {
+  describe('purgeStaticFieldDecorators', () => {
 
-    it('should comment out the decorator statement', () => {
+    it('should remove the static decorator', () => {
       // arrange
       const decoratorStatement = `
       IonicModule.decorators = [
@@ -244,12 +244,12 @@ some more content
       // act
       let magicString = new MagicString(knownContent);
       const entryPoint = join(ionicAngular, 'index.js');
-      magicString = decorators.purgeDecorators(entryPoint, knownContent, ionicAngular, angularDir, srcDir, magicString);
+      magicString = decorators.purgeStaticFieldDecorators(entryPoint, knownContent, ionicAngular, angularDir, srcDir, magicString);
       const result = magicString.toString();
 
       // assert
       expect(result).not.toEqual(knownContent);
-      const regex = decorators.getDecoratorRegex();
+      const regex = decorators.getDecoratorRegex('NgModule');
       const matches = regex.exec(result);
       expect(matches).toBeFalsy();
       expect(result.indexOf(additionalGeneratedContent)).toBeGreaterThan(-1);
@@ -292,7 +292,7 @@ ActionSheetController.ctorParameters = function () { return [
 
       let magicString = new MagicString(knownContent);
       const entryPoint = join(ionicAngular, 'index.js');
-      magicString = decorators.purgeDecorators(entryPoint, knownContent, ionicAngular, angularDir, srcDir, magicString);
+      magicString = decorators.purgeStaticFieldDecorators(entryPoint, knownContent, ionicAngular, angularDir, srcDir, magicString);
       const result = magicString.toString();
       expect(result).toEqual(knownContent);
     });
